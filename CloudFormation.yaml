@@ -1,0 +1,192 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "CloudFormation template for EC2 instance with VPC, public subnet, and security group"
+
+Parameters:
+  KeyName:
+    Description: Name of an existing EC2 KeyPair to enable SSH access
+    Type: AWS::EC2::KeyPair::KeyName
+    ConstraintDescription: Must be the name of an existing EC2 KeyPair.
+
+  MyIP:
+    Description: Your IP address for SSH access
+    Type: String
+    Default: "0.0.0.0/0"
+
+  InstanceType:
+    Description: EC2 instance type
+    Type: String
+    Default: g5.xlarge
+    AllowedValues:
+      - g5.xlarge
+      - g5.2xlarge
+      - g5.4xlarge
+      - g5.8xlarge
+      - g5.16xlarge
+      - g6.xlarge
+      - g6.2xlarge
+      - g6.4xlarge
+      - g6.8xlarge
+      - g6.12xlarge
+      - g6.16xlarge
+      - g6.24xlarge
+      - g6.48xlarge
+    ConstraintDescription: Must be a valid G5 or G6 instance type.
+
+Resources:
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-VPC
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-IGW
+
+  InternetGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      InternetGatewayId: !Ref InternetGateway
+      VpcId: !Ref VPC
+
+  PublicSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      CidrBlock: 10.0.0.0/24
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-PublicSubnet
+
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-PublicRouteTable
+
+  DefaultPublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: InternetGatewayAttachment
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  PublicSubnetRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      SubnetId: !Ref PublicSubnet
+
+  SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for stable diffusion web UI
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: !Ref MyIP
+          Description: SSH from My IP
+        - IpProtocol: tcp
+          FromPort: 7860
+          ToPort: 7860
+          CidrIp: 0.0.0.0/0
+          Description: Web UI access port
+
+  EC2Instance:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: !Ref InstanceType
+      KeyName: !Ref KeyName
+      SecurityGroupIds:
+        - !GetAtt SecurityGroup.GroupId
+      SubnetId: !Ref PublicSubnet
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs:
+            VolumeSize: 200
+            VolumeType: gp3
+            DeleteOnTermination: true
+      ImageId: ami-05be89d0d19471826
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash -ex
+
+          # Create code directory
+          dnf install python3.11 python3.11-pip gperftools-libs libglvnd-glx -y
+
+          # Clone the repository
+          git clone https://github.com/AUTOMATIC1111/stable-diffusion-webui.git
+          cd stable-diffusion-webui
+
+          python3.11 -m venv venv
+          source venv/bin/activate
+
+          # Create models directory if it doesn't exist
+          mkdir -p models/Stable-diffusion
+          mkdir -p models/ControlNet
+
+          # Download the model
+          wget -O models/Stable-diffusion/sd1_5-epiCRealism.safetensors "https://civitai.com/api/download/models/143906?type=Model&format=SafeTensor&size=pruned&fp=fp16"
+
+          # Clone the ControlNet extension
+          mkdir -p extensions
+          cd extensions
+          git clone https://github.com/Mikubill/sd-webui-controlnet.git
+
+          # Install ControlNet dependencies
+          cd sd-webui-controlnet
+          pip install -r requirements.txt
+          cd ../..
+
+          # Download ControlNet model
+          wget -O models/ControlNet/control_v11p_sd15_inpaint.pth "https://huggingface.co/lllyasviel/ControlNet-v1-1/resolve/main/control_v11p_sd15_inpaint.pth?download=true"
+
+          # Run
+          export python_cmd="python3.11"
+          ./webui.sh -f --xformers --share --listen --server-name 0.0.0.0
+
+Mappings:
+  RegionMap:
+    us-east-1:
+      SagemakerAMI: ami-0f5e8b3e084fe4ed9
+    us-east-2:
+      SagemakerAMI: ami-0ee9f10c7950c9b1c
+    us-west-1:
+      SagemakerAMI: ami-0799c34ecb6c46052
+    us-west-2:
+      SagemakerAMI: ami-0da52d6a1e5ad30b2
+    eu-west-1:
+      SagemakerAMI: ami-0f314d75cb5343475
+    eu-central-1:
+      SagemakerAMI: ami-0f0b3f22b6fa7e221
+    ap-northeast-1:
+      SagemakerAMI: ami-036fa71c0b8069f85
+    ap-northeast-2:
+      SagemakerAMI: ami-00fc928e77361179d
+    ap-southeast-1:
+      SagemakerAMI: ami-0c321d69b2db7ea92
+    ap-southeast-2:
+      SagemakerAMI: ami-0cbb97e3a919cbd7a
+    # Add other regions as needed
+
+Outputs:
+  WebUIURL:
+    Description: "URL to access the Stable Diffusion WebUI"
+    Value: !Sub "http://${EC2Instance.PublicDnsName}:7860"
+  SSHCommand:
+    Description: "Command to SSH into the instance"
+    Value: !Sub "ssh -i /path/to/${KeyName}.pem ec2-user@${EC2Instance.PublicDnsName}"
