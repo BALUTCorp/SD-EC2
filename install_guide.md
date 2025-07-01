@@ -209,4 +209,9 @@ tail -f nohup.out
 - **Tăng EBS volume** nếu cần store nhiều models
 - **Consider EBS optimization** cho I/O intensive workloads
 
-**Template này cung cấp một giải pháp production-ready để deploy Stable Diffusion WebUI với minimal setup effort, phù hợp cho cả mục đích học tập và commercial use.**
+
+## DISCLAIMER
+- For educational/reference purposes only
+- Not production-ready, use at your own risk
+- No warranty provided - test thoroughly before use
+- Author not liable for any damages or issues
