@@ -146,3 +146,9 @@ For issues with:
 - **AWS/CloudFormation**: Check AWS CloudFormation documentation
 - **Stable Diffusion WebUI**: Refer to the official AUTOMATIC1111 documentation
 - **ControlNet**: Check the ControlNet extension documentation
+
+## DISCLAIMER
+- For educational/reference purposes only
+- Not production-ready, use at your own risk
+- No warranty provided - test thoroughly before use
+- Author not liable for any damages or issues
