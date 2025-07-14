@@ -195,3 +195,9 @@ The ml.g6.2xlarge instance type is well-suited for AI/ML workloads requiring GPU
 *Last Updated: July 2025*
 *Pricing based on US East (N. Virginia) region*
 *Prices subject to change - refer to AWS Pricing Calculator for current rates*
+
+## DISCLAIMER
+- For educational/reference purposes only
+- Not production-ready, use at your own risk
+- No warranty provided - test thoroughly before use
+- Author not liable for any damages or issues
