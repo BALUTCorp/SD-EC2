@@ -1,72 +1,49 @@
-# Stable Diffusion WebUI CloudFormation Deployment Guide
+# Stable Diffusion WebUI Deployment Guide
 
-This guide walks you through deploying Stable Diffusion WebUI on AWS using CloudFormation and provides step-by-step instructions for image inpainting with ControlNet.
+This repository provides guides for deploying Stable Diffusion WebUI on AWS using different approaches. Choose the deployment method that best suits your needs.
 
-## Prerequisites
+## Deployment Options
 
-- AWS Account with appropriate permissions
-- Basic familiarity with AWS Console
+### Option 1: SageMaker Deployment (Recommended)
 
-## Deployment Steps
+Deploy Stable Diffusion WebUI on Amazon SageMaker for a managed, scalable environment with GPU acceleration.
 
-### Step 1: Create EC2 Key Pair
+**Benefits:**
+- Managed infrastructure
+- Easy scaling
+- Built-in Jupyter integration
+- Pay-per-use pricing
+- No need to manage EC2 instances
 
-1. Navigate to AWS Console → EC2 → Key Pairs
-2. Click "Create key pair"
-3. Enter a name for your key pair (e.g., `stable-diffusion-key`)
-4. Select key pair type: RSA
-5. Select private key file format: `.pem` (for Linux/Mac) or `.ppk` (for Windows)
-6. Click "Create key pair"
-7. Download and save the private key file securely
+**Documentation:**
+- [SageMaker Deployment Guide](SAGEMAKER_GUIDE.md) - Detailed guide for manual deployment
+- [Automated SageMaker Deployment Guide](AUTO_DEPLOYMENT_GUIDE.md) - Guide for fully automated deployment
 
-### Step 2: Deploy CloudFormation Stack
+**Quick Start:**
+```bash
+# Deploy using CloudFormation with G6 instance (latest NVIDIA GPU)
+aws cloudformation create-stack \
+  --stack-name stable-diffusion-webui-g6 \
+  --template-body file://sagemaker-g6.yaml \
+  --capabilities CAPABILITY_NAMED_IAM \
+  --parameters ParameterKey=InstanceType,ParameterValue=ml.g6.2xlarge
+```
 
-1. Navigate to AWS Console → CloudFormation
-2. Click "Create stack" → "With new resources (standard)"
-3. Upload your CloudFormation template file
-4. Click "Next"
+### Option 2: EC2 Deployment (Legacy)
 
-### Step 3: Configure Stack Parameters
+Deploy Stable Diffusion WebUI directly on an EC2 instance.
 
-1. **Stack name**: Enter a descriptive name (e.g., `stable-diffusion-webui`)
-2. **Instance Type**: Select `g4dn.2xlarge` from the dropdown
-3. **Key Pair**: Select the EC2 key pair you created in Step 1
-4. Configure other parameters as needed
-5. Click "Next"
+**Documentation:**
+- [EC2 Deployment Guide](EC2_GUIDE.md) - Detailed guide for EC2 deployment
 
-### Step 4: Configure Stack Options
+## Stable Diffusion WebUI Usage Guide
 
-1. Add tags if desired (optional)
-2. Configure advanced options if needed (optional)
-3. Click "Next"
-
-### Step 5: Review and Create
-
-1. Review all configurations
-2. Check the acknowledgment boxes for IAM resources (if applicable)
-3. Click "Create stack"
-
-### Step 6: Wait for Deployment
-
-1. Monitor the stack creation progress in the CloudFormation console
-2. Wait for the stack status to show "CREATE_COMPLETE"
-3. **Important**: After stack creation completes, wait an additional 5 minutes for the initialization script to finish setting up Stable Diffusion WebUI on the EC2 instance
-
-### Step 7: Access WebUI
-
-1. Go to the "Outputs" tab of your CloudFormation stack
-2. Find the `WebUIURL` output
-3. Click on the URL or copy it to your browser
-4. The URL format will be: `http://[EC2-Public-DNS]:7860`
-
-## Stable Diffusion WebUI Setup Guide
-
-Once you can access the WebUI, follow these steps to set up image inpainting with ControlNet:
+Once you have deployed the WebUI using either method, follow these steps to set up image inpainting with ControlNet:
 
 ### Step 1: Select Model
 
 1. In the WebUI interface, locate the model dropdown
-2. Select: `sd1_5-epiCRealism.safetensors`
+2. Select: `sd1_5-epiCRealism.safetensors` (or your preferred model)
 
 ### Step 2: Navigate to Inpaint
 
@@ -115,18 +92,15 @@ Once you can access the WebUI, follow these steps to set up image inpainting wit
 ### Common Issues
 
 **WebUI not accessible:**
-
-- Ensure you waited the full 5 minutes after stack creation
-- Check that your security group allows inbound traffic on port 7860
-- Verify the EC2 instance is running
+- Check the deployment logs
+- Verify that the instance is running
+- Ensure proper network connectivity
 
 **Model not loading:**
-
 - The initial model download may take time
-- Check the EC2 instance logs for any errors
+- Check logs for any errors
 
 **Poor inpainting results:**
-
 - Adjust the denoising strength
 - Try different prompts
 - Ensure your mask covers the appropriate areas
@@ -135,17 +109,22 @@ Once you can access the WebUI, follow these steps to set up image inpainting wit
 
 When you're done using the WebUI:
 
-1. Go to CloudFormation console
-2. Select your stack
-3. Click "Delete" to remove all resources and avoid ongoing charges
+1. For SageMaker: Stop or delete the notebook instance
+   ```bash
+   aws sagemaker stop-notebook-instance --notebook-instance-name stable-diffusion-g6
+   ```
+
+2. For EC2/CloudFormation: Delete the stack
+   ```bash
+   aws cloudformation delete-stack --stack-name stable-diffusion-webui
+   ```
 
 ## Support
 
 For issues with:
-
-- **AWS/CloudFormation**: Check AWS CloudFormation documentation
-- **Stable Diffusion WebUI**: Refer to the official AUTOMATIC1111 documentation
-- **ControlNet**: Check the ControlNet extension documentation
+- **AWS/CloudFormation**: Check AWS documentation
+- **Stable Diffusion WebUI**: Refer to the [official AUTOMATIC1111 documentation](https://github.com/AUTOMATIC1111/stable-diffusion-webui)
+- **ControlNet**: Check the [ControlNet extension documentation](https://github.com/Mikubill/sd-webui-controlnet)
 
 ## DISCLAIMER
 - For educational/reference purposes only
