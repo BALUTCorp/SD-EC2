@@ -1,0 +1,160 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Deploy SageMaker Notebook Instance for Stable Diffusion WebUI'
+
+Parameters:
+  NotebookInstanceName:
+    Type: String
+    Default: stable-diffusion-notebook
+    Description: Name for the SageMaker Notebook Instance
+    
+  InstanceType:
+    Type: String
+    Default: ml.g4dn.2xlarge
+    AllowedValues:
+      - ml.g4dn.xlarge
+      - ml.g4dn.2xlarge
+      - ml.g4dn.4xlarge
+      - ml.p3.2xlarge
+      - ml.p3.8xlarge
+    Description: SageMaker Notebook Instance type with GPU support
+    
+  VolumeSize:
+    Type: Number
+    Default: 100
+    MinValue: 20
+    MaxValue: 500
+    Description: Size of the EBS volume in GB (minimum 20GB recommended)
+
+Resources:
+  # S3 Bucket for storing models and outputs
+  S3Bucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub '${NotebookInstanceName}-${AWS::AccountId}-${AWS::Region}'
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      VersioningConfiguration:
+        Status: Enabled
+
+  # IAM Role for SageMaker Notebook Instance
+  SageMakerExecutionRole:
+    Type: AWS::IAM::Role
+    DependsOn: S3Bucket
+    Properties:
+      RoleName: !Sub '${NotebookInstanceName}-execution-role'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: sagemaker.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSageMakerFullAccess
+      Policies:
+        - PolicyName: S3Access
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                  - s3:DeleteObject
+                  - s3:ListBucket
+                Resource:
+                  - !Sub '${S3Bucket}/*'
+                  - !Sub '${S3Bucket}'
+
+  # Lifecycle Configuration for automatic setup
+  NotebookInstanceLifecycleConfig:
+    Type: AWS::SageMaker::NotebookInstanceLifecycleConfig
+    Properties:
+      NotebookInstanceLifecycleConfigName: !Sub '${NotebookInstanceName}-lifecycle'
+      OnStart:
+        - Content: !Base64 |
+            #!/bin/bash
+            set -e
+            
+            # Update conda and install required packages
+            sudo -u ec2-user -i <<'EOF'
+            cd /home/ec2-user/SageMaker
+            
+            # Create installation script
+            cat > install_sd.sh << 'INSTALL_EOF'
+            #!/bin/bash
+            set -e
+            
+            echo "Installing Stable Diffusion WebUI..."
+            
+            # Install system dependencies
+            pip install --upgrade pip
+            pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+            pip install xformers
+            
+            # Clone repository if not exists
+            if [ ! -d "stable-diffusion-webui" ]; then
+                git clone https://github.com/AUTOMATIC1111/stable-diffusion-webui.git
+            fi
+            
+            cd stable-diffusion-webui
+            
+            # Install requirements
+            pip install -r requirements.txt
+            
+            # Create directory structure
+            mkdir -p models/Stable-diffusion
+            mkdir -p models/ControlNet
+            mkdir -p extensions
+            
+            # Create launch script
+            cat > launch_webui.sh << 'LAUNCH_EOF'
+            #!/bin/bash
+            cd /home/ec2-user/SageMaker/stable-diffusion-webui
+            export COMMANDLINE_ARGS="--listen --port 8888 --enable-insecure-extension-access --xformers --no-half-vae"
+            python launch.py
+            LAUNCH_EOF
+            
+            chmod +x launch_webui.sh
+            
+            echo "Installation completed!"
+            INSTALL_EOF
+            
+            chmod +x install_sd.sh
+            nohup ./install_sd.sh > install.log 2>&1 &
+            EOF
+
+  # SageMaker Notebook Instance
+  NotebookInstance:
+    Type: AWS::SageMaker::NotebookInstance
+    Properties:
+      NotebookInstanceName: !Ref NotebookInstanceName
+      InstanceType: !Ref InstanceType
+      RoleArn: !GetAtt SageMakerExecutionRole.Arn
+      VolumeSizeInGB: !Ref VolumeSize
+      LifecycleConfigName: !GetAtt NotebookInstanceLifecycleConfig.NotebookInstanceLifecycleConfigName
+      DirectInternetAccess: Enabled
+
+Outputs:
+  NotebookInstanceName:
+    Description: Name of the SageMaker Notebook Instance
+    Value: !Ref NotebookInstance
+    
+  JupyterURL:
+    Description: URL to access Jupyter Notebook
+    Value: !Sub 'https://${NotebookInstance}.notebook.${AWS::Region}.sagemaker.aws/'
+    
+  WebUIURL:
+    Description: URL to access Stable Diffusion WebUI (after installation)
+    Value: !Sub 'https://${NotebookInstance}.notebook.${AWS::Region}.sagemaker.aws/proxy/8888/'
+    
+  S3BucketName:
+    Description: S3 Bucket for storing models and outputs
+    Value: !Ref S3Bucket
+    
+  ExecutionRole:
+    Description: IAM Role ARN for the notebook instance
+    Value: !GetAtt SageMakerExecutionRole.Arn
