@@ -1,20 +1,5 @@
-# Hướng Dẫn Triển Khai Stable Diffusion WebUI trên Amazon SageMaker
+# Triển Khai Stable Diffusion WebUI trên Amazon SageMaker
 
-Hướng dẫn này sẽ giúp bạn triển khai Stable Diffusion WebUI trên Amazon SageMaker Notebook Instance để có môi trường phát triển mạnh mẽ và linh hoạt.
-
-## Ưu Điểm của SageMaker so với EC2
-
-- **Quản lý dễ dàng**: Tự động khởi tạo và tắt instance
-- **Jupyter Notebook tích hợp**: Môi trường phát triển hoàn chỉnh
-- **Bảo mật cao**: IAM roles và VPC tích hợp
-- **Lưu trữ linh hoạt**: EBS volume có thể mở rộng
-- **Chi phí tối ưu**: Chỉ trả tiền khi sử dụng
-
-## Yêu Cầu Trước Khi Bắt Đầu
-
-- Tài khoản AWS với quyền tạo SageMaker resources
-- Hiểu biết cơ bản về AWS Console
-- Quota đủ cho GPU instances (ml.g4dn.2xlarge)
 
 ## Bước 1: Triển Khai CloudFormation Stack
 
