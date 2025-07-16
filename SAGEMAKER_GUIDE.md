@@ -13,7 +13,7 @@
 ### 1.2 Cấu Hình Parameters
 
 - **NotebookInstanceName**: `stable-diffusion-notebook` (hoặc tên bạn muốn)
-- **InstanceType**: `ml.g4dn.2xlarge` (khuyến nghị)
+- **InstanceType**: `ml.g6.2xlarge` (khuyến nghị)
 - **VolumeSize**: `100` GB (tối thiểu cho models)
 
 ### 1.3 Hoàn Tất Triển Khai
