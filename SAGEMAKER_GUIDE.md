@@ -81,7 +81,7 @@ cd /home/ec2-user/SageMaker/stable-diffusion-webui
 1. Lấy URL từ CloudFormation Outputs tab: `WebUIURL`
 2. Hoặc truy cập: `https://[notebook-name].notebook.[region].sagemaker.aws/proxy/8888/`
 
-## Bước 5: Cấu Hình WebUI cho Inpainting
+## Bước 5: Cấu Hình WebUI cho Inpainting (Underconstruction)
 
 ### 5.1 Chọn Model
 
@@ -106,7 +106,7 @@ cd /home/ec2-user/SageMaker/stable-diffusion-webui
    - Model: `control_v11p_sd15_inpaint`
    - Control mode: "ControlNet is more important"
 
-## Bước 6: Tối Ưu Hóa và Quản Lý
+## Bước 6: Tối Ưu Hóa và Quản Lý (Underconstruction)
 
 ### 6.1 Lưu Trữ Models
 
@@ -238,20 +238,7 @@ aws s3 sync /home/ec2-user/SageMaker/stable-diffusion-webui/outputs/ \
 jupyter nbconvert --to script *.ipynb
 ```
 
-## Kết Luận
 
-SageMaker cung cấp môi trường mạnh mẽ và linh hoạt cho việc chạy Stable Diffusion WebUI với:
-
-- Quản lý tài nguyên tự động
-- Tích hợp Jupyter Notebook
-- Bảo mật và compliance cao
-- Chi phí tối ưu với pay-per-use
-
-Môi trường này phù hợp cho:
-- Phát triển và thử nghiệm
-- Training custom models
-- Batch processing
-- Collaborative work
 
 ## Hỗ Trợ
 
