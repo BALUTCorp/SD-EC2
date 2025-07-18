@@ -1,12 +1,12 @@
-AWSTemplateFormatVersion: '2010-09-09'
-Description: 'Deploy SageMaker Notebook Instance for Stable Diffusion WebUI with G6 Instance'
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "Deploy SageMaker Notebook Instance for Stable Diffusion WebUI with G6 Instance"
 
 Parameters:
   NotebookInstanceName:
     Type: String
     Default: stable-diffusion-g6
     Description: Name for the SageMaker Notebook Instance
-    
+
   InstanceType:
     Type: String
     Default: ml.g6.2xlarge
@@ -20,7 +20,7 @@ Parameters:
       - ml.g6.24xlarge
       - ml.g6.48xlarge
     Description: SageMaker Notebook Instance type with G6 GPU
-    
+
   VolumeSize:
     Type: Number
     Default: 100
@@ -34,7 +34,7 @@ Resources:
     Type: AWS::IAM::Role
     Properties:
       AssumeRolePolicyDocument:
-        Version: '2012-10-17'
+        Version: "2012-10-17"
         Statement:
           - Effect: Allow
             Principal:
@@ -48,85 +48,120 @@ Resources:
   NotebookInstanceLifecycleConfig:
     Type: AWS::SageMaker::NotebookInstanceLifecycleConfig
     Properties:
-      NotebookInstanceLifecycleConfigName: !Sub '${NotebookInstanceName}-lifecycle'
+      NotebookInstanceLifecycleConfigName: !Sub "${NotebookInstanceName}-lifecycle"
       OnStart:
         - Content: !Base64 |
             #!/bin/bash
             set -e
-            
+
             # Update conda and install required packages
             sudo -u ec2-user -i <<'EOF'
             cd /home/ec2-user/SageMaker
-            
+
             # Create installation script
             cat > install_sd.sh << 'INSTALL_EOF'
-            #!/bin/bash
-            set -e
-            
-            echo "Installing Stable Diffusion WebUI..."
-            
-            # Clone repository if not exists
-            if [ ! -d "stable-diffusion-webui" ]; then
-                git clone https://github.com/AUTOMATIC1111/stable-diffusion-webui.git
-                cd stable-diffusion-webui
-                
-                # Modify requirements to avoid xformers error
-                sed -i 's/xformers/#xformers/g' requirements.txt
-                
-                # Install requirements
-                pip install -r requirements.txt
-                
-                # Install compatible xformers version
-                pip install xformers==0.0.23
-                
-                # Create directory structure
-                mkdir -p models/Stable-diffusion
-                mkdir -p models/ControlNet
-                mkdir -p extensions
-                
-                # Download ControlNet extension
-                cd extensions
-                git clone https://github.com/Mikubill/sd-webui-controlnet.git
-                cd ..
-                
-                # Create launch script
-                cat > launch_webui.sh << 'LAUNCH_EOF'
-            #!/bin/bash
-            cd /home/ec2-user/SageMaker/stable-diffusion-webui
-            export COMMANDLINE_ARGS="--listen --port 7860 --enable-insecure-extension-access --no-half-vae"
-            python launch.py
-            LAUNCH_EOF
-                
-                chmod +x launch_webui.sh
-                
-                echo "Installation completed!"
-            else
-                echo "Stable Diffusion WebUI already installed."
-            fi
+            # Install jupyter-server-proxy
+            pip install jupyter-server-proxy
+            sudo yum install gperftools-libs libglvnd-glx -y
+            jupyter serverextension enable --py jupyter_server_proxy
+
+            # Create directory for Stable Diffusion WebUI
+            mkdir -p ~/SageMaker/stable-diffusion-webui
+            cd ~/SageMaker/stable-diffusion-webui
+
+            # Clone the repository
+            git clone https://github.com/AUTOMATIC1111/stable-diffusion-webui.git .
+
+            # Create models directory if it doesn't exist
+            mkdir -p models/Stable-diffusion
+            mkdir -p models/ControlNet
+
+            # Download the model
+            wget -O models/Stable-diffusion/sd1_5-epiCRealism.safetensors "https://civitai.com/api/download/models/143906?type=Model&format=SafeTensor&size=pruned&fp=fp16"
+
+            # Clone the ControlNet extension
+            mkdir -p extensions
+            cd extensions
+            git clone https://github.com/Mikubill/sd-webui-controlnet.git
+
+            # Install ControlNet dependencies
+            cd sd-webui-controlnet
+            pip install -r requirements.txt
+            cd ../..
+
+            # Download ControlNet model
+            wget -O models/ControlNet/control_v11p_sd15_inpaint.pth "https://huggingface.co/lllyasviel/ControlNet-v1-1/resolve/main/control_v11p_sd15_inpaint.pth?download=true"
             INSTALL_EOF
-            
+
+            # Create launch script
+            cat > launch_webui.sh << 'LAUNCH_EOF'
+            #!/bin/bash
+            cat > ~/SageMaker/start_webui.py << 'EOFPYTHON'
+            import subprocess
+            import os
+            import time
+            from pathlib import Path
+
+            # Path to stable-diffusion-webui
+            sd_path = Path("/home/ec2-user/SageMaker/stable-diffusion-webui")
+
+            # Start the Stable Diffusion WebUI with appropriate parameters
+            proc = subprocess.Popen(
+                [
+                    "./webui.sh",
+                    "--listen",
+                    "--share",
+                    "--subpath=proxy/7860"
+                ],
+                cwd=str(sd_path)
+            )
+            # Keep the notebook cell running
+            time.sleep(300)
+            proc.terminate()
+            re = subprocess.Popen(
+                [
+                    "./webui.sh",
+                    "--listen",
+                    "--share",
+                    "--subpath=proxy/7860"
+                ],
+                cwd=str(sd_path)
+            )
+            try:
+                while True:
+                    time.sleep(10)
+            except KeyboardInterrupt:
+                print("Stopping Stable Diffusion WebUI...")
+                re.terminate()
+            EOFPYTHON
+            python ~/SageMaker/start_webui.py
+            LAUNCH_EOF
+
+            chmod +x launch_webui.sh
+
+            echo "Installation completed!"
             chmod +x install_sd.sh
             ./install_sd.sh > install_sd.log 2>&1
-            
+
             # Create auto-start script for Jupyter
             cat > auto_start_webui.ipynb << 'NOTEBOOK_EOF'
             {
-             "cells": [
+            "cells": [
               {
-               "cell_type": "markdown",
-               "metadata": {},
-               "source": [
+              "cell_type": "markdown",
+              "metadata": {},
+              "source": [
                 "# Stable Diffusion WebUI Auto-Starter\n",
                 "\n",
                 "This notebook automatically starts the Stable Diffusion WebUI when opened."
-               ]
+              ]
               },
               {
-               "cell_type": "code",
-               "execution_count": null,
-               "metadata": {},
-               "outputs": [],
-               "source": [
+              "cell_type": "code",
+              "execution_count": null,
+              "metadata": {},
+              "outputs": [],
+              "source": [
                 "import subprocess\n",
                 "import os\n",
                 "import time\n",
@@ -140,7 +175,7 @@ Resources:
                 "\n",
                 "def start_webui():\n",
                 "    \"\"\"Start Stable Diffusion WebUI\"\"\"\n",
-                "    webui_dir = \"/home/ec2-user/SageMaker/stable-diffusion-webui\"\n",
+                "    webui_dir = \"/home/ec2-user/SageMaker/\"\n",
                 "    port = 7860\n",
                 "    \n",
                 "    # Check if WebUI is already running\n",
@@ -203,22 +238,22 @@ Resources:
                 "        <p>Try accessing: <a href=\"/proxy/{port}/\" target=\"_blank\">/proxy/{port}/</a></p>\n",
                 "    </div>\n",
                 "    '''))"
-               ]
+              ]
               },
               {
-               "cell_type": "code",
-               "execution_count": null,
-               "metadata": {},
-               "outputs": [],
-               "source": [
+              "cell_type": "code",
+              "execution_count": null,
+              "metadata": {},
+              "outputs": [],
+              "source": [
                 "# Start WebUI automatically\n",
                 "start_webui()"
-               ]
+              ]
               },
               {
-               "cell_type": "markdown",
-               "metadata": {},
-               "source": [
+              "cell_type": "markdown",
+              "metadata": {},
+              "source": [
                 "## Inpainting with ControlNet Guide\n",
                 "\n",
                 "### Step 1: Select Model\n",
@@ -266,50 +301,50 @@ Resources:
                 "1. Click the \"Generate\" button\n",
                 "2. Wait for the processing to complete\n",
                 "3. Review the generated result in the output panel"
-               ]
+              ]
               }
-             ],
-             "metadata": {
+            ],
+            "metadata": {
               "kernelspec": {
-               "display_name": "Python 3",
-               "language": "python",
-               "name": "python3"
+              "display_name": "Python 3",
+              "language": "python",
+              "name": "python3"
               },
               "language_info": {
-               "codemirror_mode": {
+              "codemirror_mode": {
                 "name": "ipython",
                 "version": 3
-               },
-               "file_extension": ".py",
-               "mimetype": "text/x-python",
-               "name": "python",
-               "nbconvert_exporter": "python",
-               "pygments_lexer": "ipython3",
-               "version": "3.8.5"
+              },
+              "file_extension": ".py",
+              "mimetype": "text/x-python",
+              "name": "python",
+              "nbconvert_exporter": "python",
+              "pygments_lexer": "ipython3",
+              "version": "3.8.5"
               }
-             },
-             "nbformat": 4,
-             "nbformat_minor": 4
+            },
+            "nbformat": 4,
+            "nbformat_minor": 4
             }
             NOTEBOOK_EOF
-            
+
             # Create auto-start service
             cat > /home/ec2-user/SageMaker/start_webui_service.sh << 'SERVICE_EOF'
             #!/bin/bash
             cd /home/ec2-user/SageMaker/stable-diffusion-webui
-            if [ -f "launch_webui.sh" ]; then
-                nohup ./launch_webui.sh > webui_service.log 2>&1 &
+            if [ -f "../launch_webui.sh" ]; then
+                nohup ../launch_webui.sh > webui_service.log 2>&1 &
                 echo "WebUI service started"
             else
                 echo "WebUI not installed yet"
             fi
             SERVICE_EOF
-            
+
             chmod +x /home/ec2-user/SageMaker/start_webui_service.sh
-            
+
             # Add to crontab to start on reboot
             (crontab -l 2>/dev/null; echo "@reboot /home/ec2-user/SageMaker/start_webui_service.sh") | crontab -
-            
+
             # Start the service now
             /home/ec2-user/SageMaker/start_webui_service.sh
             EOF
@@ -326,18 +361,14 @@ Resources:
       DirectInternetAccess: Enabled
 
 Outputs:
-  NotebookInstanceName:
-    Description: Name of the SageMaker Notebook Instance
-    Value: !Ref NotebookInstance
-    
   JupyterURL:
     Description: URL to access Jupyter Notebook
-    Value: !Sub 'https://${NotebookInstance}.notebook.${AWS::Region}.sagemaker.aws/'
-    
+    Value: !Sub "https://${AWS::AccountId}.${AWS::Region}.console.aws.amazon.com/sagemaker/home?region=${AWS::Region}#/notebook-instances/${NotebookInstance.NotebookInstanceName}"
+
   WebUIURL:
     Description: URL to access Stable Diffusion WebUI (after installation)
-    Value: !Sub 'https://${NotebookInstance}.notebook.${AWS::Region}.sagemaker.aws/proxy/7860/'
-    
+    Value: !Sub "https://${NotebookInstance.NotebookInstanceName}.notebook.${AWS::Region}.sagemaker.aws/proxy/7860"
+
   ExecutionRole:
     Description: IAM Role ARN for the notebook instance
     Value: !GetAtt SageMakerExecutionRole.Arn
